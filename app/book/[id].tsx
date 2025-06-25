@@ -1,7 +1,9 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -17,6 +19,7 @@ export default function BookDetailScreen() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const loadBookAndNotes = async () => {
     if (!id) return;
@@ -142,281 +145,399 @@ export default function BookDetailScreen() {
 
   if (loading) {
     return (
-      <ThemedView style={styles.container}>
-        <ThemedText>Loading...</ThemedText>
+      <ThemedView style={styles.loadingContainer}>
+        <LinearGradient
+          colors={['#667eea', '#764ba2']}
+          style={StyleSheet.absoluteFillObject}
+        />
+        <ThemedText style={styles.loadingText}>Loading...</ThemedText>
       </ThemedView>
     );
   }
 
   if (!book) {
     return (
-      <ThemedView style={styles.container}>
-        <ThemedText>Book not found</ThemedText>
+      <ThemedView style={styles.loadingContainer}>
+        <LinearGradient
+          colors={['#667eea', '#764ba2']}
+          style={StyleSheet.absoluteFillObject}
+        />
+        <ThemedText style={styles.loadingText}>Book not found</ThemedText>
       </ThemedView>
     );
   }
 
   return (
-    <ThemedView style={styles.container}>
-      <ThemedView style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton} 
-          onPress={() => router.back()}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <IconSymbol name="chevron.left" size={20} color="#64748b" />
-        </TouchableOpacity>
-        <ThemedView style={styles.actions}>
-          <TouchableOpacity style={styles.actionButton} onPress={handleExportPDF}>
-            <IconSymbol name="square.and.arrow.up" size={18} color="#64748b" />
+    <>
+      <Stack.Screen 
+        options={{
+          headerShown: false,
+        }}
+      />
+      <ThemedView style={styles.container}>
+        <LinearGradient
+          colors={['#667eea', '#764ba2']}
+          style={StyleSheet.absoluteFillObject}
+        />
+        
+        {/* Floating Navigation */}
+        <ThemedView style={[styles.floatingNav, { top: insets.top + 10 }]}>
+          <TouchableOpacity 
+            style={styles.navButton} 
+            onPress={() => router.back()}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <IconSymbol name="chevron.left" size={22} color="#ffffff" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.addButton} onPress={handleAddNote}>
-            <IconSymbol name="plus" size={18} color="#ffffff" />
-          </TouchableOpacity>
-        </ThemedView>
-      </ThemedView>
-
-      <ThemedView style={styles.bookInfo}>
-        <ThemedText type="title" style={styles.bookTitle}>
-          {book.title}
-        </ThemedText>
-        <ThemedText type="body" style={styles.bookAuthor}>by {book.author}</ThemedText>
-        <ThemedView style={styles.statsContainer}>
-          <ThemedView style={styles.statItem}>
-            <ThemedText type="caption" style={styles.statLabel}>Notes</ThemedText>
-            <ThemedText type="label" style={styles.statValue}>{notes.length}</ThemedText>
-          </ThemedView>
-          <ThemedView style={styles.statDivider} />
-          <ThemedView style={styles.statItem}>
-            <ThemedText type="caption" style={styles.statLabel}>Images</ThemedText>
-            <ThemedText type="label" style={styles.statValue}>
-              {notes.reduce((total, note) => total + note.images.length, 0)}
-            </ThemedText>
-          </ThemedView>
-        </ThemedView>
-      </ThemedView>
-
-      <ScrollView 
-        style={styles.notesList}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.notesListContent}
-      >
-        {notes.length === 0 ? (
-          <ThemedView style={styles.emptyState}>
-            <ThemedView style={styles.emptyIconContainer}>
-              <IconSymbol name="note.text" size={48} color="#cbd5e1" />
-            </ThemedView>
-            <ThemedText type="heading" style={styles.emptyText}>No notes yet</ThemedText>
-            <ThemedText type="body" style={styles.emptySubtext}>
-              Start taking notes for this book
-            </ThemedText>
-          </ThemedView>
-        ) : (
-          notes.map((note, index) => (
-            <TouchableOpacity
-              key={note.id}
-              style={[
-                styles.noteItem,
-                { marginTop: index === 0 ? 0 : 12 }
-              ]}
-              onPress={() => handleNotePress(note)}
-              activeOpacity={0.8}
-            >
-              <ThemedView style={styles.noteHeader}>
-                <ThemedView style={styles.noteInfo}>
-                  <ThemedText type="label" style={styles.noteTitle} numberOfLines={2}>
-                    {note.title}
-                  </ThemedText>
-                  <ThemedView style={styles.noteMetadata}>
-                    <ThemedText type="caption" style={styles.pageNumber}>
-                      Page {note.pageNumber}
-                    </ThemedText>
-                    <ThemedView style={styles.metadataDot} />
-                    <ThemedText type="caption" style={styles.imageCount}>
-                      {note.images.length} {note.images.length === 1 ? 'image' : 'images'}
-                    </ThemedText>
-                  </ThemedView>
-                </ThemedView>
-                <TouchableOpacity
-                  style={styles.deleteButton}
-                  onPress={() => handleDeleteNote(note)}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <IconSymbol name="trash" size={16} color="#ef4444" />
-                </TouchableOpacity>
-              </ThemedView>
+          <ThemedView style={styles.navActions}>
+            <TouchableOpacity style={styles.navActionButton} onPress={handleExportPDF}>
+              <IconSymbol name="square.and.arrow.up" size={20} color="#ffffff" />
             </TouchableOpacity>
-          ))
-        )}
-      </ScrollView>
-    </ThemedView>
+            <TouchableOpacity style={styles.addFloatingButton} onPress={handleAddNote}>
+              <IconSymbol name="plus" size={20} color="#667eea" />
+            </TouchableOpacity>
+          </ThemedView>
+        </ThemedView>
+
+        <ScrollView 
+          style={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 80 }]}
+          scrollIndicatorInsets={{ top: insets.top + 70 }}
+          contentInsetAdjustmentBehavior="never"
+          bounces={false}
+        >
+          {/* Hero Book Card */}
+          <ThemedView style={styles.heroCard}>
+            <ThemedView style={styles.bookIconContainer}>
+              <IconSymbol name="book.closed" size={32} color="#667eea" />
+            </ThemedView>
+            <ThemedText style={styles.heroTitle}>{book.title}</ThemedText>
+            <ThemedText style={styles.heroAuthor}>by {book.author}</ThemedText>
+            
+            {/* Floating Stats */}
+            <ThemedView style={styles.floatingStats}>
+              <ThemedView style={styles.statBubble}>
+                <ThemedText style={styles.statNumber}>{notes.length}</ThemedText>
+                <ThemedText style={styles.statLabel}>Notes</ThemedText>
+              </ThemedView>
+              <ThemedView style={styles.statBubble}>
+                <ThemedText style={styles.statNumber}>
+                  {notes.reduce((total, note) => total + note.images.length, 0)}
+                </ThemedText>
+                <ThemedText style={styles.statLabel}>Photos</ThemedText>
+              </ThemedView>
+            </ThemedView>
+          </ThemedView>
+
+          {/* Notes Section */}
+          <ThemedView style={styles.notesSection}>
+            <ThemedText style={styles.sectionTitle}>Your Notes</ThemedText>
+            
+            {notes.length === 0 ? (
+              <ThemedView style={styles.emptyCard}>
+                <ThemedView style={styles.emptyIconWrapper}>
+                  <IconSymbol name="note.text" size={40} color="#667eea" />
+                </ThemedView>
+                <ThemedText style={styles.emptyTitle}>Start Your Journey</ThemedText>
+                <ThemedText style={styles.emptySubtitle}>
+                  Capture your thoughts and insights as you read
+                </ThemedText>
+              </ThemedView>
+            ) : (
+              <ThemedView style={styles.notesGrid}>
+                {notes.map((note, index) => (
+                  <TouchableOpacity
+                    key={note.id}
+                    style={[
+                      styles.noteCard,
+                      { 
+                        transform: [{ rotate: `${(index % 2 === 0 ? -1 : 1) * 0.5}deg` }],
+                        marginTop: index === 0 ? 0 : -8,
+                        zIndex: notes.length - index
+                      }
+                    ]}
+                    onPress={() => handleNotePress(note)}
+                    activeOpacity={0.9}
+                  >
+                    <ThemedView style={styles.noteCardHeader}>
+                      <ThemedView style={styles.notePageBadge}>
+                        <ThemedText style={styles.notePageText}>p.{note.pageNumber}</ThemedText>
+                      </ThemedView>
+                      <TouchableOpacity
+                        style={styles.noteDeleteButton}
+                        onPress={() => handleDeleteNote(note)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <IconSymbol name="trash" size={14} color="#ff6b6b" />
+                      </TouchableOpacity>
+                    </ThemedView>
+                    
+                    <ThemedText style={styles.noteCardTitle} numberOfLines={3}>
+                      {note.title}
+                    </ThemedText>
+                    
+                    {note.images.length > 0 && (
+                      <ThemedView style={styles.noteImageIndicator}>
+                        <IconSymbol name="photo" size={14} color="#667eea" />
+                        <ThemedText style={styles.noteImageCount}>
+                          {note.images.length}
+                        </ThemedText>
+                      </ThemedView>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </ThemedView>
+            )}
+          </ThemedView>
+        </ScrollView>
+
+        {/* Gradient Overlay to mask content behind navigation */}
+        <LinearGradient
+          colors={['rgba(102, 126, 234, 0.8)', 'rgba(102, 126, 234, 0)']}
+          style={[styles.topGradientOverlay, { height: insets.top + 80 }]}
+          pointerEvents="none"
+        />
+      </ThemedView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    // backgroundColor: 'green',
   },
-  header: {
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '500',
+  },
+  floatingNav: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 16,
+    zIndex: 100,
+    backgroundColor: 'transparent',
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f8fafc',
+  navButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
+    backdropFilter: 'blur(10px)',
   },
-  actions: {
+  navActions: {
     flexDirection: 'row',
     gap: 12,
+    backgroundColor: 'transparent',
   },
-  actionButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f8fafc',
+  navActionButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
+    backdropFilter: 'blur(10px)',
   },
-  addButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#2563eb',
+  addFloatingButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#2563eb',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
   },
-  bookInfo: {
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-  },
-  bookTitle: {
-    color: '#1e293b',
-    marginBottom: 8,
-  },
-  bookAuthor: {
-    color: '#64748b',
-    marginBottom: 20,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
-    padding: 16,
-  },
-  statItem: {
+  scrollContainer: {
     flex: 1,
+    backgroundColor: 'transparent',
+  },
+  scrollContent: {
+    paddingBottom: 40,
+  },
+  heroCard: {
+    marginHorizontal: 20,
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 32,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 12,
+    marginBottom: 32,
   },
-  statLabel: {
-    color: '#64748b',
-    marginBottom: 4,
-  },
-  statValue: {
-    color: '#1e293b',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: '#e2e8f0',
-    marginHorizontal: 16,
-  },
-  notesList: {
-    flex: 1,
-    paddingHorizontal: 24,
-  },
-  notesListContent: {
-    paddingBottom: 100,
-  },
-  emptyState: {
-    flex: 1,
+  bookIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#f8faff',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 32,
-    marginTop: 60,
+    marginBottom: 20,
   },
-  emptyIconContainer: {
+  heroTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1a1a2e',
+    textAlign: 'center',
+    marginBottom: 8,
+    lineHeight: 32,
+  },
+  heroAuthor: {
+    fontSize: 16,
+    color: '#667eea',
+    textAlign: 'center',
+    marginBottom: 24,
+    fontWeight: '500',
+  },
+  floatingStats: {
+    flexDirection: 'row',
+    gap: 16,
+    backgroundColor: 'transparent',
+  },
+  statBubble: {
+    backgroundColor: '#f8faff',
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    minWidth: 80,
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#667eea',
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#8b92b8',
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  notesSection: {
+    paddingHorizontal: 20,
+    backgroundColor: 'transparent',
+  },
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#ffffff',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  emptyCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 20,
+    padding: 40,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  emptyIconWrapper: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: '#f8faff',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
   },
-  emptyText: {
-    color: '#1e293b',
-    textAlign: 'center',
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1a1a2e',
     marginBottom: 8,
+    textAlign: 'center',
   },
-  emptySubtext: {
-    color: '#64748b',
+  emptySubtitle: {
+    fontSize: 15,
+    color: '#667eea',
     textAlign: 'center',
     lineHeight: 22,
   },
-  noteItem: {
+  notesGrid: {
+    marginTop: 8,
+    backgroundColor: 'transparent',
+  },
+  noteCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#f1f5f9',
-    shadowColor: '#64748b',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    borderRadius: 16,
+    padding: 20,
+    marginHorizontal: 4,
+    marginVertical: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  noteHeader: {
+  noteCardHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    backgroundColor: 'transparent',
   },
-  noteInfo: {
-    flex: 1,
-    marginRight: 12,
+  notePageBadge: {
+    backgroundColor: '#667eea',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
-  noteTitle: {
-    color: '#1e293b',
-    marginBottom: 8,
-    lineHeight: 20,
+  notePageText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
   },
-  noteMetadata: {
+  noteDeleteButton: {
+    padding: 4,
+  },
+  noteCardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a1a2e',
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  noteImageIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: '#f8faff',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    gap: 4,
   },
-  pageNumber: {
-    color: '#2563eb',
+  noteImageCount: {
+    fontSize: 12,
+    color: '#667eea',
+    fontWeight: '500',
   },
-  metadataDot: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: '#cbd5e1',
-    marginHorizontal: 8,
-  },
-  imageCount: {
-    color: '#64748b',
-  },
-  deleteButton: {
-    padding: 4,
+  topGradientOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 99,
   },
 });

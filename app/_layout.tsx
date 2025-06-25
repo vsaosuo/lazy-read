@@ -24,7 +24,7 @@ export default function RootLayout() {
         flex: 1, 
         backgroundColor: colorScheme === 'dark' ? DarkTheme.colors.background : DefaultTheme.colors.background 
       }} 
-      edges={['top', 'left', 'right']}
+      edges={['left', 'right']}
     >
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <Stack>
