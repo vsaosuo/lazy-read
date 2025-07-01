@@ -47,50 +47,32 @@ export default function BookDetailScreen() {
   const handleAddNote = () => {
     Alert.prompt(
       'Add New Note',
-      'Enter note title:',
+      'Enter page number:',
       [
         {
           text: 'Cancel',
           style: 'cancel',
         },
         {
-          text: 'Next',
-          onPress: (title) => {
-            if (title?.trim()) {
-              Alert.prompt(
-                'Add New Note',
-                'Enter page number:',
-                [
-                  {
-                    text: 'Cancel',
-                    style: 'cancel',
-                  },
-                  {
-                    text: 'Create',
-                    onPress: async (pageStr) => {
-                      const pageNumber = parseInt(pageStr || '1', 10);
-                      if (pageNumber > 0) {
-                        const newNote: Note = {
-                          id: generateId(),
-                          bookId: id!,
-                          title: title.trim(),
-                          pageNumber,
-                          images: [],
-                          createdAt: new Date(),
-                          updatedAt: new Date(),
-                        };
-                        try {
-                          await StorageService.saveNote(newNote);
-                          router.push(`/(tabs)/notes?noteId=${newNote.id}` as any);
-                        } catch (error) {
-                          Alert.alert('Error', 'Failed to create note');
-                        }
-                      }
-                    },
-                  },
-                ],
-                'plain-text'
-              );
+          text: 'Create',
+          onPress: async (pageStr) => {
+            const pageNumber = parseInt(pageStr || '1', 10);
+            if (pageNumber > 0) {
+              const newNote: Note = {
+                id: generateId(),
+                bookId: id!,
+                title: "Page " + pageNumber + "'s Note",
+                pageNumber,
+                images: [],
+                createdAt: new Date(),
+                updatedAt: new Date(),
+              };
+              try {
+                await StorageService.saveNote(newNote);
+                router.push(`/(tabs)/notes?noteId=${newNote.id}` as any);
+              } catch (error) {
+                Alert.alert('Error', 'Failed to create note');
+              }
             }
           },
         },

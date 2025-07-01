@@ -15,7 +15,7 @@ A React Native app that helps you take organized notes while reading books. Capt
 
 - **React Native** with Expo
 - **Expo Router** for navigation
-- **AsyncStorage** for local data persistence
+- **SQLite** with expo-sqlite for local data persistence
 - **Expo Camera & Image Picker** for image capture
 - **Expo Print** for PDF generation
 - **TypeScript** for type safety
