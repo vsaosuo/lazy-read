@@ -19,11 +19,87 @@ export class DatabaseService {
       if (!this.db) {
         this.db = await SQLite.openDatabaseAsync(this.DB_NAME);
         await this.createTables();
+        await this.runMigrations();
         console.log('Database initialized successfully');
       }
     } catch (error) {
       console.error('Error initializing database:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Run database migrations to update existing schemas
+   */
+  private static async runMigrations(): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    try {
+      // Check if cover_uri column exists in books table
+      const tableInfo = await this.db.getAllAsync(`PRAGMA table_info(books)`);
+      const hasCoverUri = tableInfo.some((column: any) => column.name === 'cover_uri');
+      
+      if (!hasCoverUri) {
+        console.log('Adding cover_uri column to books table...');
+        await this.db.execAsync(`
+          ALTER TABLE books ADD COLUMN cover_uri TEXT;
+        `);
+        console.log('Migration completed: Added cover_uri column');
+      }
+
+      // Check if sort_order column exists in notes table
+      const notesTableInfo = await this.db.getAllAsync(`PRAGMA table_info(notes)`);
+      const hasSortOrder = notesTableInfo.some((column: any) => column.name === 'sort_order');
+      
+      if (!hasSortOrder) {
+        console.log('Adding sort_order column to notes table...');
+        await this.db.execAsync(`ALTER TABLE notes ADD COLUMN sort_order INTEGER DEFAULT 0`);
+        
+        // Update existing notes with sort order based on creation date
+        await this.db.execAsync(`
+          UPDATE notes 
+          SET sort_order = (
+            SELECT COUNT(*) 
+            FROM notes n2 
+            WHERE n2.book_id = notes.book_id 
+            AND n2.created_at <= notes.created_at
+          )
+        `);
+        console.log('Migration completed: Added sort_order column to notes');
+      }
+
+      // Check if sort_order column exists in note_images table
+      const imagesTableInfo = await this.db.getAllAsync(`PRAGMA table_info(note_images)`);
+      const hasImageSortOrder = imagesTableInfo.some((column: any) => column.name === 'sort_order');
+      
+      if (!hasImageSortOrder) {
+        console.log('Adding sort_order column to note_images table...');
+        await this.db.execAsync(`ALTER TABLE note_images ADD COLUMN sort_order INTEGER DEFAULT 0`);
+        
+        // Update existing images with sort order based on their current order
+        const notes = await this.db.getAllAsync(`SELECT id FROM notes`);
+        for (const note of notes) {
+          const noteRow = note as any;
+          const images = await this.db.getAllAsync(`
+            SELECT id FROM note_images 
+            WHERE note_id = ? 
+            ORDER BY id
+          `, [noteRow.id]);
+          
+          for (let i = 0; i < images.length; i++) {
+            const imageRow = images[i] as any;
+            await this.db.runAsync(`
+              UPDATE note_images 
+              SET sort_order = ? 
+              WHERE id = ?
+            `, [i, imageRow.id]);
+          }
+        }
+        console.log('Migration completed: Added sort_order column to note_images');
+      }
+    } catch (error) {
+      console.error('Error running migrations:', error);
+      // Don't throw here - we want the app to continue working even if migrations fail
     }
   }
 
@@ -41,6 +117,7 @@ export class DatabaseService {
           title TEXT NOT NULL,
           author TEXT NOT NULL,
           description TEXT,
+          cover_uri TEXT,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         );
@@ -53,6 +130,7 @@ export class DatabaseService {
           book_id TEXT NOT NULL,
           title TEXT NOT NULL,
           page_number INTEGER NOT NULL,
+          sort_order INTEGER DEFAULT 0,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL,
           FOREIGN KEY (book_id) REFERENCES books (id) ON DELETE CASCADE
@@ -66,6 +144,7 @@ export class DatabaseService {
           note_id TEXT NOT NULL,
           uri TEXT NOT NULL,
           description TEXT NOT NULL,
+          sort_order INTEGER DEFAULT 0,
           FOREIGN KEY (note_id) REFERENCES notes (id) ON DELETE CASCADE
         );
       `);
@@ -109,6 +188,7 @@ export class DatabaseService {
         title: row.title,
         author: row.author,
         description: row.description,
+        coverUri: row.cover_uri,
         createdAt: new Date(row.created_at),
         updatedAt: new Date(row.updated_at),
       }));
@@ -134,6 +214,7 @@ export class DatabaseService {
         title: row.title,
         author: row.author,
         description: row.description,
+        coverUri: row.cover_uri,
         createdAt: new Date(row.created_at),
         updatedAt: new Date(row.updated_at),
       };
@@ -156,14 +237,14 @@ export class DatabaseService {
       if (existing) {
         // Update existing book
         await db.runAsync(
-          'UPDATE books SET title = ?, author = ?, description = ?, updated_at = ? WHERE id = ?',
-          [book.title, book.author, book.description || null, book.updatedAt.toISOString(), book.id]
+          'UPDATE books SET title = ?, author = ?, description = ?, cover_uri = ?, updated_at = ? WHERE id = ?',
+          [book.title, book.author, book.description || null, book.coverUri || null, book.updatedAt.toISOString(), book.id]
         );
       } else {
         // Insert new book
         await db.runAsync(
-          'INSERT INTO books (id, title, author, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-          [book.id, book.title, book.author, book.description || null, book.createdAt.toISOString(), book.updatedAt.toISOString()]
+          'INSERT INTO books (id, title, author, description, cover_uri, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [book.id, book.title, book.author, book.description || null, book.coverUri || null, book.createdAt.toISOString(), book.updatedAt.toISOString()]
         );
       }
     } catch (error) {
@@ -215,7 +296,7 @@ export class DatabaseService {
         params.push(bookId);
       }
       
-      query += ' ORDER BY page_number ASC, created_at DESC';
+      query += ' ORDER BY sort_order ASC, page_number ASC, created_at DESC';
       
       const notesResult = await db.getAllAsync(query, params);
       
@@ -224,7 +305,7 @@ export class DatabaseService {
       for (const noteRow of notesResult) {
         const row = noteRow as any;
         const imagesResult = await db.getAllAsync(
-          'SELECT * FROM note_images WHERE note_id = ? ORDER BY id',
+          'SELECT * FROM note_images WHERE note_id = ? ORDER BY sort_order ASC, id',
           [row.id]
         );
         
@@ -232,6 +313,7 @@ export class DatabaseService {
           id: imgRow.id,
           uri: imgRow.uri,
           description: imgRow.description,
+          sortOrder: imgRow.sort_order || 0,
         }));
         
         notes.push({
@@ -239,6 +321,7 @@ export class DatabaseService {
           bookId: row.book_id,
           title: row.title,
           pageNumber: row.page_number,
+          sortOrder: row.sort_order || 0,
           images,
           createdAt: new Date(row.created_at),
           updatedAt: new Date(row.updated_at),
@@ -266,7 +349,7 @@ export class DatabaseService {
       
       // Get images for this note
       const imagesResult = await db.getAllAsync(
-        'SELECT * FROM note_images WHERE note_id = ? ORDER BY id',
+        'SELECT * FROM note_images WHERE note_id = ? ORDER BY sort_order ASC, id',
         [noteId]
       );
       
@@ -274,6 +357,7 @@ export class DatabaseService {
         id: imgRow.id,
         uri: imgRow.uri,
         description: imgRow.description,
+        sortOrder: imgRow.sort_order || 0,
       }));
       
       return {
@@ -281,6 +365,7 @@ export class DatabaseService {
         bookId: row.book_id,
         title: row.title,
         pageNumber: row.page_number,
+        sortOrder: row.sort_order || 0,
         images,
         createdAt: new Date(row.created_at),
         updatedAt: new Date(row.updated_at),
@@ -305,31 +390,54 @@ export class DatabaseService {
         if (existing) {
           // Update existing note
           await db.runAsync(
-            'UPDATE notes SET book_id = ?, title = ?, page_number = ?, updated_at = ? WHERE id = ?',
-            [note.bookId, note.title, note.pageNumber, note.updatedAt.toISOString(), note.id]
+            'UPDATE notes SET book_id = ?, title = ?, page_number = ?, sort_order = ?, updated_at = ? WHERE id = ?',
+            [note.bookId, note.title, note.pageNumber, note.sortOrder, note.updatedAt.toISOString(), note.id]
           );
           
           // Delete existing images
           await db.runAsync('DELETE FROM note_images WHERE note_id = ?', [note.id]);
         } else {
+          // If this is a new note and no sort order is specified, set it to the end
+          const sortOrder = note.sortOrder !== undefined ? note.sortOrder : await this.getNextNoteSortOrder(note.bookId);
+          
           // Insert new note
           await db.runAsync(
-            'INSERT INTO notes (id, book_id, title, page_number, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-            [note.id, note.bookId, note.title, note.pageNumber, note.createdAt.toISOString(), note.updatedAt.toISOString()]
+            'INSERT INTO notes (id, book_id, title, page_number, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [note.id, note.bookId, note.title, note.pageNumber, sortOrder, note.createdAt.toISOString(), note.updatedAt.toISOString()]
           );
         }
         
-        // Insert images
-        for (const image of note.images) {
+        // Insert images with sort order
+        for (let i = 0; i < note.images.length; i++) {
+          const image = note.images[i];
+          const sortOrder = image.sortOrder !== undefined ? image.sortOrder : i;
           await db.runAsync(
-            'INSERT INTO note_images (id, note_id, uri, description) VALUES (?, ?, ?, ?)',
-            [image.id, note.id, image.uri, image.description]
+            'INSERT INTO note_images (id, note_id, uri, description, sort_order) VALUES (?, ?, ?, ?, ?)',
+            [image.id, note.id, image.uri, image.description, sortOrder]
           );
         }
       });
     } catch (error) {
       console.error('Error saving note:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Get the next sort order for a new note in a book
+   */
+  private static async getNextNoteSortOrder(bookId: string): Promise<number> {
+    try {
+      const db = await this.getDatabase();
+      const result = await db.getFirstAsync(
+        'SELECT MAX(sort_order) as max_order FROM notes WHERE book_id = ?',
+        [bookId]
+      );
+      const maxOrder = (result as any)?.max_order || -1;
+      return maxOrder + 1;
+    } catch (error) {
+      console.error('Error getting next sort order:', error);
+      return 0;
     }
   }
 
@@ -349,6 +457,48 @@ export class DatabaseService {
       });
     } catch (error) {
       console.error('Error deleting note:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update the sort order of notes within a book
+   */
+  static async updateNotesOrder(bookId: string, noteIds: string[]): Promise<void> {
+    try {
+      const db = await this.getDatabase();
+      
+      await db.withTransactionAsync(async () => {
+        for (let i = 0; i < noteIds.length; i++) {
+          await db.runAsync(
+            'UPDATE notes SET sort_order = ?, updated_at = ? WHERE id = ? AND book_id = ?',
+            [i, new Date().toISOString(), noteIds[i], bookId]
+          );
+        }
+      });
+    } catch (error) {
+      console.error('Error updating notes order:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update the sort order of images within a note
+   */
+  static async updateImagesOrder(noteId: string, imageIds: string[]): Promise<void> {
+    try {
+      const db = await this.getDatabase();
+      
+      await db.withTransactionAsync(async () => {
+        for (let i = 0; i < imageIds.length; i++) {
+          await db.runAsync(
+            'UPDATE note_images SET sort_order = ? WHERE id = ? AND note_id = ?',
+            [i, imageIds[i], noteId]
+          );
+        }
+      });
+    } catch (error) {
+      console.error('Error updating images order:', error);
       throw error;
     }
   }

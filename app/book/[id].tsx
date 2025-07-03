@@ -2,7 +2,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { Alert, Image, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/ThemedText';
@@ -30,7 +30,8 @@ export default function BookDetailScreen() {
       setBook(foundBook || null);
       
       const bookNotes = await StorageService.getNotes(id);
-      setNotes(bookNotes.sort((a, b) => a.pageNumber - b.pageNumber));
+      // Notes are already sorted by sort_order ASC, page_number ASC, created_at DESC from the database
+      setNotes(bookNotes);
     } catch (error) {
       console.error('Error loading book and notes:', error);
     } finally {
@@ -63,6 +64,7 @@ export default function BookDetailScreen() {
                 bookId: id!,
                 title: "Page " + pageNumber + "'s Note",
                 pageNumber,
+                sortOrder: 0, // Will be set by the database service
                 images: [],
                 createdAt: new Date(),
                 updatedAt: new Date(),
@@ -150,7 +152,7 @@ export default function BookDetailScreen() {
   }
 
   return (
-    <>
+     <>
       <Stack.Screen 
         options={{
           headerShown: false,
@@ -191,9 +193,19 @@ export default function BookDetailScreen() {
         >
           {/* Hero Book Card */}
           <ThemedView style={styles.heroCard}>
-            <ThemedView style={styles.bookIconContainer}>
-              <IconSymbol name="book.closed" size={32} color="#667eea" />
-            </ThemedView>
+            {book.coverUri ? (
+              <ThemedView style={styles.bookCoverWrapper}>
+                <Image 
+                  source={{ uri: book.coverUri }} 
+                  style={styles.heroBookCover}
+                  resizeMode="cover"
+                />
+              </ThemedView>
+            ) : (
+              <ThemedView style={styles.bookIconContainer}>
+                <IconSymbol name="book.closed" size={32} color="#667eea" />
+              </ThemedView>
+            )}
             <ThemedText style={styles.heroTitle}>{book.title}</ThemedText>
             <ThemedText style={styles.heroAuthor}>by {book.author}</ThemedText>
             
@@ -212,11 +224,13 @@ export default function BookDetailScreen() {
             </ThemedView>
           </ThemedView>
 
-          {/* Notes Section */}
+          {/* Notes Section Header */}
           <ThemedView style={styles.notesSection}>
-            <ThemedText style={styles.sectionTitle}>Your Notes</ThemedText>
+            <ThemedView style={styles.sectionHeader}>
+              <ThemedText style={styles.sectionTitle}>Your Notes</ThemedText>
+            </ThemedView>
             
-            {notes.length === 0 ? (
+            {notes.length === 0 && (
               <ThemedView style={styles.emptyCard}>
                 <ThemedView style={styles.emptyIconWrapper}>
                   <IconSymbol name="note.text" size={40} color="#667eea" />
@@ -226,52 +240,63 @@ export default function BookDetailScreen() {
                   Capture your thoughts and insights as you read
                 </ThemedText>
               </ThemedView>
-            ) : (
-              <ThemedView style={styles.notesGrid}>
-                {notes.map((note, index) => (
-                  <TouchableOpacity
-                    key={note.id}
-                    style={[
-                      styles.noteCard,
-                      { 
-                        transform: [{ rotate: `${(index % 2 === 0 ? -1 : 1) * 0.5}deg` }],
-                        marginTop: index === 0 ? 0 : -8,
-                        zIndex: notes.length - index
-                      }
-                    ]}
-                    onPress={() => handleNotePress(note)}
-                    activeOpacity={0.9}
-                  >
-                    <ThemedView style={styles.noteCardHeader}>
-                      <ThemedView style={styles.notePageBadge}>
-                        <ThemedText style={styles.notePageText}>p.{note.pageNumber}</ThemedText>
-                      </ThemedView>
-                      <TouchableOpacity
-                        style={styles.noteDeleteButton}
-                        onPress={() => handleDeleteNote(note)}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        <IconSymbol name="trash" size={14} color="#ff6b6b" />
-                      </TouchableOpacity>
-                    </ThemedView>
-                    
-                    <ThemedText style={styles.noteCardTitle} numberOfLines={3}>
-                      {note.title}
-                    </ThemedText>
-                    
-                    {note.images.length > 0 && (
-                      <ThemedView style={styles.noteImageIndicator}>
-                        <IconSymbol name="photo" size={14} color="#667eea" />
-                        <ThemedText style={styles.noteImageCount}>
-                          {note.images.length}
-                        </ThemedText>
-                      </ThemedView>
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </ThemedView>
             )}
           </ThemedView>
+
+          {/* Notes Grid - Outside ScrollView to avoid nesting virtualized lists */}
+          {notes.length > 0 && (
+            <ThemedView style={styles.notesGridContainer}>
+              <ScrollView
+                style={styles.notesScrollView}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.notesScrollContent}
+              >
+                <ThemedView style={styles.notesGrid}>
+                  {notes.map((note, index) => (
+                    <TouchableOpacity
+                      key={note.id}
+                      style={[
+                        styles.noteCard,
+                        {
+                          transform: [{ rotate: `${(index % 2 === 0 ? -1 : 1) * 0.5}deg` }],
+                          marginTop: index === 0 ? 0 : -8,
+                          zIndex: notes.length - index
+                        }
+                      ]}
+                      onPress={() => handleNotePress(note)}
+                      activeOpacity={0.9}
+                    >
+                      <ThemedView style={styles.noteCardHeader}>
+                        <ThemedView style={styles.notePageBadge}>
+                          <ThemedText style={styles.notePageText}>p.{note.pageNumber}</ThemedText>
+                        </ThemedView>
+                        <TouchableOpacity
+                          style={styles.noteDeleteButton}
+                          onPress={() => handleDeleteNote(note)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <IconSymbol name="trash" size={14} color="#ff6b6b" />
+                        </TouchableOpacity>
+                      </ThemedView>
+
+                      <ThemedText style={styles.noteCardTitle} numberOfLines={3}>
+                        {note.title}
+                      </ThemedText>
+
+                      {note.images.length > 0 && (
+                        <ThemedView style={styles.noteImageIndicator}>
+                          <IconSymbol name="photo" size={14} color="#667eea" />
+                          <ThemedText style={styles.noteImageCount}>
+                            {note.images.length}
+                          </ThemedText>
+                        </ThemedView>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </ThemedView>
+              </ScrollView>
+            </ThemedView>
+          )}
         </ScrollView>
 
         {/* Gradient Overlay to mask content behind navigation */}
@@ -281,7 +306,7 @@ export default function BookDetailScreen() {
           pointerEvents="none"
         />
       </ThemedView>
-    </>
+      </>
   );
 }
 
@@ -515,11 +540,46 @@ const styles = StyleSheet.create({
     color: '#667eea',
     fontWeight: '500',
   },
+  bookCoverWrapper: {
+    width: 80,
+    height: 120,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  heroBookCover: {
+    width: '100%',
+    height: '100%',
+  },
   topGradientOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     zIndex: 99,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    backgroundColor: 'transparent',
+  },
+  notesGridContainer: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  notesScrollView: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  notesScrollContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 40,
   },
 });

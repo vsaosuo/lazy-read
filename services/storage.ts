@@ -145,6 +145,32 @@ export class StorageService {
     }
   }
 
+  /**
+   * Update the sort order of notes within a book
+   */
+  static async updateNotesOrder(bookId: string, noteIds: string[]): Promise<void> {
+    try {
+      await this.ensureInitialized();
+      await DatabaseService.updateNotesOrder(bookId, noteIds);
+    } catch (error) {
+      console.error('Error updating notes order:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update the sort order of images within a note
+   */
+  static async updateImagesOrder(noteId: string, imageIds: string[]): Promise<void> {
+    try {
+      await this.ensureInitialized();
+      await DatabaseService.updateImagesOrder(noteId, imageIds);
+    } catch (error) {
+      console.error('Error updating images order:', error);
+      throw error;
+    }
+  }
+
   // ===== UTILITY METHODS =====
 
   /**

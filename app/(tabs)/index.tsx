@@ -1,8 +1,10 @@
 import { useFocusEffect } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as MediaLibrary from 'expo-media-library';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { Alert, Dimensions, ScrollView, StatusBar, StyleSheet, TouchableOpacity } from 'react-native';
+import { Alert, Dimensions, Image, ScrollView, StatusBar, StyleSheet, TouchableOpacity } from 'react-native';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -60,19 +62,21 @@ export default function BooksScreen() {
                     text: 'Create',
                     onPress: async (author) => {
                       if (author?.trim()) {
-                        const newBook: Book = {
-                          id: generateId(),
-                          title: title.trim(),
-                          author: author.trim(),
-                          createdAt: new Date(),
-                          updatedAt: new Date(),
-                        };
-                        try {
-                          await StorageService.saveBook(newBook);
-                          loadBooks();
-                        } catch (error) {
-                          Alert.alert('Error', 'Failed to create book');
-                        }
+                        // Ask if user wants to add cover photo
+                        Alert.alert(
+                          'Book Cover',
+                          'Would you like to add a cover photo for this book?',
+                          [
+                            {
+                              text: 'Skip',
+                              onPress: () => createBookWithoutCover(title.trim(), author.trim()),
+                            },
+                            {
+                              text: 'Add Photo',
+                              onPress: () => showImagePickerOptions(title.trim(), author.trim()),
+                            },
+                          ]
+                        );
                       }
                     },
                   },
@@ -85,6 +89,113 @@ export default function BooksScreen() {
       ],
       'plain-text'
     );
+  };
+
+  const createBookWithoutCover = async (title: string, author: string) => {
+    const newBook: Book = {
+      id: generateId(),
+      title,
+      author,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    try {
+      await StorageService.saveBook(newBook);
+      loadBooks();
+    } catch (error) {
+      Alert.alert('Error', 'Failed to create book');
+    }
+  };
+
+  const showImagePickerOptions = (title: string, author: string) => {
+    Alert.alert(
+      'Select Cover Photo',
+      'Choose how you want to add the book cover:',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Camera',
+          onPress: () => takeBookCoverPhoto(title, author),
+        },
+        {
+          text: 'Photo Library',
+          onPress: () => pickBookCoverFromLibrary(title, author),
+        },
+      ]
+    );
+  };
+
+  const requestPermissions = async () => {
+    const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
+    const { status: mediaLibraryStatus } = await MediaLibrary.requestPermissionsAsync();
+    
+    if (cameraStatus !== 'granted' || mediaLibraryStatus !== 'granted') {
+      Alert.alert('Permission required', 'Please grant camera and media library permissions to use this feature.');
+      return false;
+    }
+    return true;
+  };
+
+  const takeBookCoverPhoto = async (title: string, author: string) => {
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) return;
+
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [3, 4], // Book cover aspect ratio
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        createBookWithCover(title, author, result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'Failed to take photo');
+    }
+  };
+
+  const pickBookCoverFromLibrary = async (title: string, author: string) => {
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) return;
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [3, 4], // Book cover aspect ratio
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        createBookWithCover(title, author, result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
+  const createBookWithCover = async (title: string, author: string, coverUri: string) => {
+    const newBook: Book = {
+      id: generateId(),
+      title,
+      author,
+      coverUri,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    try {
+      await StorageService.saveBook(newBook);
+      loadBooks();
+    } catch (error) {
+      Alert.alert('Error', 'Failed to create book');
+    }
   };
 
   const handleDeleteBook = (book: Book) => {
@@ -185,40 +296,84 @@ export default function BooksScreen() {
                 onPress={() => handleBookPress(book)}
                 activeOpacity={0.9}
               >
-                <LinearGradient
-                  colors={index % 3 === 0 ? ['#667eea', '#764ba2'] : 
-                          index % 3 === 1 ? ['#f093fb', '#f5576c'] : 
-                          ['#4facfe', '#00f2fe']}
-                  style={styles.bookCardGradient}
-                >
-                  <ThemedView style={styles.bookCardHeader}>
-                    <ThemedView style={styles.bookIconWrapper}>
-                      <ThemedText style={styles.bookEmoji}>
-                        {index % 4 === 0 ? '📚' : index % 4 === 1 ? '📖' : index % 4 === 2 ? '📝' : '🎯'}
+                {book.coverUri ? (
+                  // Show book cover image
+                  <ThemedView style={styles.bookCoverContainer}>
+                    <Image 
+                      source={{ uri: book.coverUri }} 
+                      style={styles.bookCoverImage}
+                      resizeMode="cover"
+                    />
+                    <LinearGradient
+                      colors={['transparent', 'rgba(0,0,0,0.7)']}
+                      style={styles.bookCoverOverlay}
+                    >
+                      <ThemedView style={styles.bookCardHeader}>
+                        <ThemedView style={styles.bookIconWrapper}>
+                          <ThemedText style={styles.bookEmoji}>
+                            📚
+                          </ThemedText>
+                        </ThemedView>
+                        <TouchableOpacity
+                          style={styles.modernDeleteButton}
+                          onPress={() => handleDeleteBook(book)}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                          <IconSymbol name="trash" size={16} color="#ffffff" />
+                        </TouchableOpacity>
+                      </ThemedView>
+                      
+                      <ThemedView style={styles.bookCardContent}>
+                        <ThemedText style={styles.modernBookTitle} numberOfLines={3}>
+                          {book.title}
+                        </ThemedText>
+                        <ThemedText style={styles.modernBookAuthor} numberOfLines={2}>
+                          by {book.author}
+                        </ThemedText>
+                      </ThemedView>
+                      
+                      <ThemedView style={styles.bookCardFooter}>
+                        <ThemedText style={styles.readMoreText}>Tap to explore →</ThemedText>
+                      </ThemedView>
+                    </LinearGradient>
+                  </ThemedView>
+                ) : (
+                  // Show gradient background as fallback
+                  <LinearGradient
+                    colors={index % 3 === 0 ? ['#667eea', '#764ba2'] : 
+                            index % 3 === 1 ? ['#f093fb', '#f5576c'] : 
+                            ['#4facfe', '#00f2fe']}
+                    style={styles.bookCardGradient}
+                  >
+                    <ThemedView style={styles.bookCardHeader}>
+                      <ThemedView style={styles.bookIconWrapper}>
+                        <ThemedText style={styles.bookEmoji}>
+                          {index % 4 === 0 ? '📚' : index % 4 === 1 ? '📖' : index % 4 === 2 ? '📝' : '🎯'}
+                        </ThemedText>
+                      </ThemedView>
+                      <TouchableOpacity
+                        style={styles.modernDeleteButton}
+                        onPress={() => handleDeleteBook(book)}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <IconSymbol name="trash" size={16} color="#ffffff" />
+                      </TouchableOpacity>
+                    </ThemedView>
+                    
+                    <ThemedView style={styles.bookCardContent}>
+                      <ThemedText style={styles.modernBookTitle} numberOfLines={3}>
+                        {book.title}
+                      </ThemedText>
+                      <ThemedText style={styles.modernBookAuthor} numberOfLines={2}>
+                        by {book.author}
                       </ThemedText>
                     </ThemedView>
-                    <TouchableOpacity
-                      style={styles.modernDeleteButton}
-                      onPress={() => handleDeleteBook(book)}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <IconSymbol name="trash" size={16} color="#ffffff" />
-                    </TouchableOpacity>
-                  </ThemedView>
-                  
-                  <ThemedView style={styles.bookCardContent}>
-                    <ThemedText style={styles.modernBookTitle} numberOfLines={3}>
-                      {book.title}
-                    </ThemedText>
-                    <ThemedText style={styles.modernBookAuthor} numberOfLines={2}>
-                      by {book.author}
-                    </ThemedText>
-                  </ThemedView>
-                  
-                  <ThemedView style={styles.bookCardFooter}>
-                    <ThemedText style={styles.readMoreText}>Tap to explore →</ThemedText>
-                  </ThemedView>
-                </LinearGradient>
+                    
+                    <ThemedView style={styles.bookCardFooter}>
+                      <ThemedText style={styles.readMoreText}>Tap to explore →</ThemedText>
+                    </ThemedView>
+                  </LinearGradient>
+                )}
               </TouchableOpacity>
             ))}
           </ThemedView>
@@ -428,5 +583,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     fontStyle: 'italic',
+  },
+  bookCoverContainer: {
+    flex: 1,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  bookCoverImage: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+  },
+  bookCoverOverlay: {
+    flex: 1,
+    padding: 20,
+    justifyContent: 'space-between',
   },
 });

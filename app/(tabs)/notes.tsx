@@ -5,6 +5,8 @@ import * as MediaLibrary from 'expo-media-library';
 import { useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, Dimensions, Image, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -28,6 +30,7 @@ export default function NotesScreen() {
   const [editTextContent, setEditTextContent] = useState('');
   const [editingTitle, setEditingTitle] = useState(false);
   const [editTitleText, setEditTitleText] = useState('');
+  const [isReorderingImages, setIsReorderingImages] = useState(false);
 
   useEffect(() => {
     if (noteId) {
@@ -78,6 +81,7 @@ export default function NotesScreen() {
           id: generateId(),
           uri: asset.uri,
           description: '',
+          sortOrder: note.images.length,
         };
 
         const updatedNote = {
@@ -113,6 +117,7 @@ export default function NotesScreen() {
           id: generateId(),
           uri: asset.uri,
           description: '',
+          sortOrder: note.images.length,
         };
 
         const updatedNote = {
@@ -208,6 +213,7 @@ export default function NotesScreen() {
       id: generateId(),
       uri: '', // Empty uri indicates this is a text-only entry
       description: '',
+      sortOrder: note.images.length,
     };
 
     setEditingImageId(newTextEntry.id);
@@ -278,6 +284,173 @@ export default function NotesScreen() {
     setEditTitleText('');
   };
 
+  const handleReorderImages = async (data: NoteImage[]) => {
+    if (!note) return;
+    
+    try {
+      // Update local state immediately for responsiveness
+      const updatedNote = {
+        ...note,
+        images: data,
+        updatedAt: new Date(),
+      };
+      setNote(updatedNote);
+      
+      // Update order in database
+      const imageIds = data.map(image => image.id);
+      await StorageService.updateImagesOrder(note.id, imageIds);
+    } catch (error) {
+      console.error('Error reordering images:', error);
+      Alert.alert('Error', 'Failed to reorder images');
+      // Reload note from database on error
+      loadNote();
+    }
+  };
+
+  const toggleImageReorderMode = () => {
+    setIsReorderingImages(!isReorderingImages);
+  };
+
+  const renderImageItem = ({ item: entry, getIndex, drag, isActive }: RenderItemParams<NoteImage>) => {
+    const index = getIndex() ?? 0;
+    
+    return (
+      <ScaleDecorator>
+        <View style={[
+          styles.imageSection, 
+          { backgroundColor: colors.background + '40' },
+          isActive && styles.reorderingImageCard
+        ]}>
+          <View style={styles.imageSectionHeader}>
+            <View style={[styles.sectionNumber, { backgroundColor: colors.tint + '20' }]}>
+              <ThemedText type="caption" style={[styles.sectionNumberText, { color: colors.tint }]}>
+                {index + 1}
+              </ThemedText>
+            </View>
+            {isReorderingImages && (
+              <TouchableOpacity
+                style={styles.imageDragHandle}
+                onPressIn={drag}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <IconSymbol name="line.horizontal.3" size={16} color={colors.tint} />
+              </TouchableOpacity>
+            )}
+          </View>
+          
+          {entry.uri ? (
+            <View style={styles.imageContainer}>
+              <Image source={{ uri: entry.uri }} style={styles.markdownImage} />
+              <View style={styles.imageActions}>
+                <TouchableOpacity
+                  style={[styles.imageActionButton, { backgroundColor: colors.destructive + '15' }]}
+                  onPress={() => deleteImage(entry.id)}
+                >
+                  <IconSymbol name="trash" size={14} color={colors.destructive} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+          
+          <View style={[styles.descriptionBlock, { backgroundColor: colors.background + '60' }]}>
+            {editingImageId === entry.id ? (
+              <View style={styles.inlineEditContainer}>
+                <View style={styles.descriptionHeader}>
+                  <IconSymbol name="pencil" size={16} color={colors.tint} />
+                  <ThemedText type="caption" style={[styles.descriptionLabel, { color: colors.tint }]}>
+                    {entry.uri ? 'EDITING DESCRIPTION' : 'EDITING TEXT NOTE'}
+                  </ThemedText>
+                </View>
+                <TextInput
+                  style={[styles.inlineTextInput, { 
+                    backgroundColor: colors.background + '80',
+                    borderColor: colors.tint + '40',
+                    color: colors.text,
+                    minHeight: entry.uri ? 160 : 120
+                  }]}
+                  value={editDescription}
+                  onChangeText={setEditDescription}
+                  placeholder={entry.uri ? 
+                    "Describe what you see, key insights, or important details..." :
+                    "Write your thoughts, ideas, or notes here..."
+                  }
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  numberOfLines={entry.uri ? 4 : 3}
+                  autoFocus
+                  returnKeyType="default"
+                  blurOnSubmit={false}
+                  scrollEnabled={false}
+                />
+                <View style={styles.inlineEditActions}>
+                  <TouchableOpacity
+                    style={[styles.inlineActionButton, styles.cancelInlineButton, { borderColor: colors.border }]}
+                    onPress={() => {
+                      if (!entry.uri && !entry.description) {
+                        deleteImage(entry.id);
+                      } else {
+                        cancelEditDescription();
+                      }
+                    }}
+                  >
+                    <IconSymbol name="xmark" size={14} color={colors.textSecondary} />
+                    <ThemedText type="caption" style={[styles.inlineActionText, { color: colors.textSecondary }]}>
+                      {!entry.uri && !entry.description ? 'Delete' : 'Cancel'}
+                    </ThemedText>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.inlineActionButton, styles.saveInlineButton, { backgroundColor: colors.tint }]}
+                    onPress={saveDescription}
+                  >
+                    <IconSymbol name="checkmark" size={14} color="#ffffff" />
+                    <ThemedText type="caption" style={[styles.inlineActionText, { color: '#ffffff' }]}>
+                      Save
+                    </ThemedText>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <View>
+                {entry.description ? (
+                  <View>
+                    <View style={styles.descriptionHeader}>
+                      <IconSymbol name={entry.uri ? "text.alignleft" : "doc.text"} size={16} color={colors.textSecondary} />
+                      <ThemedText type="caption" style={[styles.descriptionLabel, { color: colors.textSecondary }]}>
+                        {entry.uri ? 'DESCRIPTION' : 'TEXT NOTE'}
+                      </ThemedText>
+                      <TouchableOpacity
+                        style={[styles.editDescriptionButton, { backgroundColor: colors.tint + '15' }]}
+                        onPress={() => editImageDescription(entry)}
+                      >
+                        <IconSymbol name="pencil" size={12} color={colors.tint} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.editDescriptionButton, { backgroundColor: colors.destructive + '15', marginLeft: 8 }]}
+                        onPress={() => deleteImage(entry.id)}
+                      >
+                        <IconSymbol name="trash" size={12} color={colors.destructive} />
+                      </TouchableOpacity>
+                    </View>
+                    <ThemedText type="body" style={[styles.markdownDescription, { color: colors.text }]}>
+                      {entry.description}
+                    </ThemedText>
+                  </View>
+                ) : (
+                  <TouchableOpacity onPress={() => editImageDescription(entry)} style={styles.addDescriptionPromptContainer}>
+                    <IconSymbol name="plus.circle" size={20} color={colors.textSecondary} />
+                    <ThemedText type="caption" style={[styles.addDescriptionText, { color: colors.textSecondary }]}>
+                      {entry.uri ? 'Add description for this image...' : 'Add text content...'}
+                    </ThemedText>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+          </View>
+        </View>
+      </ScaleDecorator>
+    );
+  };
+
   if (!noteId) {
     return (
       <View style={[styles.container, { backgroundColor: 'transparent' }]}>
@@ -331,16 +504,17 @@ export default function NotesScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: 'transparent' }]}>
-      <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
-      
-      <LinearGradient
-        colors={colorScheme === 'dark' 
-          ? ['rgba(15, 23, 42, 0.98)', 'rgba(30, 41, 59, 0.95)', 'rgba(51, 65, 85, 0.92)']
-          : ['rgba(255, 255, 255, 0.98)', 'rgba(248, 250, 252, 0.95)', 'rgba(241, 245, 249, 0.92)']
-        }
-        style={styles.gradientBackground}
-      >
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <View style={[styles.container, { backgroundColor: 'transparent' }]}>
+        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
+        
+        <LinearGradient
+          colors={colorScheme === 'dark' 
+            ? ['rgba(15, 23, 42, 0.98)', 'rgba(30, 41, 59, 0.95)', 'rgba(51, 65, 85, 0.92)']
+            : ['rgba(255, 255, 255, 0.98)', 'rgba(248, 250, 252, 0.95)', 'rgba(241, 245, 249, 0.92)']
+          }
+          style={styles.gradientBackground}
+        >
         {/* Floating toolbar */}
         <BlurView intensity={15} style={[styles.floatingToolbar, { backgroundColor: colors.background + '20' }]}>
           <View style={styles.toolbarContent}>
@@ -352,6 +526,14 @@ export default function NotesScreen() {
             </View>
             
             <View style={styles.toolbarActions}>
+              {note.images.length > 1 && (
+                <TouchableOpacity 
+                  style={[styles.toolbarButton, { backgroundColor: isReorderingImages ? '#ff6b6b' : colors.tint + '80' }]}
+                  onPress={toggleImageReorderMode}
+                >
+                  <IconSymbol name={isReorderingImages ? "checkmark" : "line.horizontal.3"} size={16} color="#ffffff" />
+                </TouchableOpacity>
+              )}
               <TouchableOpacity 
                 style={[styles.toolbarButton, { backgroundColor: colors.tint }]}
                 onPress={showImageOptions}
@@ -445,7 +627,7 @@ export default function NotesScreen() {
                           </TouchableOpacity>
                         )}
                         
-                        <View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 8 }}>
                           <IconSymbol name="book" size={16} color={colors.tint} />
                           <ThemedText type="caption" style={[ { color: colors.tint }]}>
                             Page {note.pageNumber}
@@ -455,130 +637,140 @@ export default function NotesScreen() {
                     </View>
                     
                     <View style={styles.documentContent}>
-                      {note.images.map((entry, index) => (
-                        <View key={entry.id} style={[styles.imageSection, { backgroundColor: colors.background + '40' }]}>
-                          <View style={styles.imageSectionHeader}>
-                            <View style={[styles.sectionNumber, { backgroundColor: colors.tint + '20' }]}>
-                              <ThemedText type="caption" style={[styles.sectionNumberText, { color: colors.tint }]}>
-                                {index + 1}
-                              </ThemedText>
-                            </View>
-                            {/* <ThemedText style={[styles.imageSectionTitle, { color: colors.text }]}>
-                              {entry.uri ? 'Image Entry' : 'Text Note'}
-                            </ThemedText> */}
-                          </View>
-                          
-                          {entry.uri ? (
-                            <View style={styles.imageContainer}>
-                              <Image source={{ uri: entry.uri }} style={styles.markdownImage} />
-                              <View style={styles.imageActions}>
-                                <TouchableOpacity
-                                  style={[styles.imageActionButton, { backgroundColor: colors.destructive + '15' }]}
-                                  onPress={() => deleteImage(entry.id)}
-                                >
-                                  <IconSymbol name="trash" size={14} color={colors.destructive} />
-                                </TouchableOpacity>
-                              </View>
-                            </View>
-                          ) : null}
-                          
-                          <View style={[styles.descriptionBlock, { backgroundColor: colors.background + '60' }]}>
-                            {editingImageId === entry.id ? (
-                              <View style={styles.inlineEditContainer}>
-                                <View style={styles.descriptionHeader}>
-                                  <IconSymbol name="pencil" size={16} color={colors.tint} />
-                                  <ThemedText type="caption" style={[styles.descriptionLabel, { color: colors.tint }]}>
-                                    {entry.uri ? 'EDITING DESCRIPTION' : 'EDITING TEXT NOTE'}
+                      {isReorderingImages ? (
+                        <DraggableFlatList
+                          data={note.images}
+                          renderItem={renderImageItem}
+                          keyExtractor={(item) => item.id}
+                          onDragEnd={({ data }) => handleReorderImages(data)}
+                          containerStyle={styles.draggableImageContainer}
+                          scrollEnabled={false}
+                        />
+                      ) : (
+                        <>
+                          {note.images.map((entry, index) => (
+                            <View key={entry.id} style={[styles.imageSection, { backgroundColor: colors.background + '40' }]}>
+                              <View style={styles.imageSectionHeader}>
+                                <View style={[styles.sectionNumber, { backgroundColor: colors.tint + '20' }]}>
+                                  <ThemedText type="caption" style={[styles.sectionNumberText, { color: colors.tint }]}>
+                                    {index + 1}
                                   </ThemedText>
                                 </View>
-                                <TextInput
-                                  style={[styles.inlineTextInput, { 
-                                    backgroundColor: colors.background + '80',
-                                    borderColor: colors.tint + '40',
-                                    color: colors.text,
-                                    minHeight: entry.uri ? 160 : 120
-                                  }]}
-                                  value={editDescription}
-                                  onChangeText={setEditDescription}
-                                  placeholder={entry.uri ? 
-                                    "Describe what you see, key insights, or important details..." :
-                                    "Write your thoughts, ideas, or notes here..."
-                                  }
-                                  placeholderTextColor={colors.textSecondary}
-                                  multiline
-                                  numberOfLines={entry.uri ? 4 : 3}
-                                  autoFocus
-                                  returnKeyType="default"
-                                  blurOnSubmit={false}
-                                  scrollEnabled={false}
-                                />
-                                <View style={styles.inlineEditActions}>
-                                  <TouchableOpacity
-                                    style={[styles.inlineActionButton, styles.cancelInlineButton, { borderColor: colors.border }]}
-                                    onPress={() => {
-                                      if (!entry.uri && !entry.description) {
-                                        // If it's a new text entry with no content, delete it
-                                        deleteImage(entry.id);
-                                      } else {
-                                        cancelEditDescription();
-                                      }
-                                    }}
-                                  >
-                                    <IconSymbol name="xmark" size={14} color={colors.textSecondary} />
-                                    <ThemedText type="caption" style={[styles.inlineActionText, { color: colors.textSecondary }]}>
-                                      {!entry.uri && !entry.description ? 'Delete' : 'Cancel'}
-                                    </ThemedText>
-                                  </TouchableOpacity>
-                                  <TouchableOpacity
-                                    style={[styles.inlineActionButton, styles.saveInlineButton, { backgroundColor: colors.tint }]}
-                                    onPress={saveDescription}
-                                  >
-                                    <IconSymbol name="checkmark" size={14} color="#ffffff" />
-                                    <ThemedText type="caption" style={[styles.inlineActionText, { color: '#ffffff' }]}>
-                                      Save
-                                    </ThemedText>
-                                  </TouchableOpacity>
-                                </View>
                               </View>
-                            ) : (
-                              <View>
-                                {entry.description ? (
-                                  <View>
+                              
+                              {entry.uri ? (
+                                <View style={styles.imageContainer}>
+                                  <Image source={{ uri: entry.uri }} style={styles.markdownImage} />
+                                  <View style={styles.imageActions}>
+                                    <TouchableOpacity
+                                      style={[styles.imageActionButton, { backgroundColor: colors.destructive + '15' }]}
+                                      onPress={() => deleteImage(entry.id)}
+                                    >
+                                      <IconSymbol name="trash" size={14} color={colors.destructive} />
+                                    </TouchableOpacity>
+                                  </View>
+                                </View>
+                              ) : null}
+                              
+                              <View style={[styles.descriptionBlock, { backgroundColor: colors.background + '60' }]}>
+                                {editingImageId === entry.id ? (
+                                  <View style={styles.inlineEditContainer}>
                                     <View style={styles.descriptionHeader}>
-                                      <IconSymbol name={entry.uri ? "text.alignleft" : "doc.text"} size={16} color={colors.textSecondary} />
-                                      <ThemedText type="caption" style={[styles.descriptionLabel, { color: colors.textSecondary }]}>
-                                        {entry.uri ? 'DESCRIPTION' : 'TEXT NOTE'}
+                                      <IconSymbol name="pencil" size={16} color={colors.tint} />
+                                      <ThemedText type="caption" style={[styles.descriptionLabel, { color: colors.tint }]}>
+                                        {entry.uri ? 'EDITING DESCRIPTION' : 'EDITING TEXT NOTE'}
                                       </ThemedText>
+                                    </View>
+                                    <TextInput
+                                      style={[styles.inlineTextInput, { 
+                                        backgroundColor: colors.background + '80',
+                                        borderColor: 'transparent',
+                                        color: colors.text,
+                                        minHeight: entry.uri ? 160 : 120
+                                      }]}
+                                      value={editDescription}
+                                      onChangeText={setEditDescription}
+                                      placeholder={entry.uri ? 
+                                        "Describe what you see, key insights, or important details..." :
+                                        "Write your thoughts, ideas, or notes here..."
+                                      }
+                                      placeholderTextColor={colors.textSecondary}
+                                      multiline
+                                      // numberOfLines={entry.uri ? 4 : 3}
+                                      autoFocus
+                                      returnKeyType="default"
+                                      blurOnSubmit={false}
+                                      scrollEnabled={true}
+                                    />
+                                    <View style={styles.inlineEditActions}>
                                       <TouchableOpacity
-                                        style={[styles.editDescriptionButton, { backgroundColor: colors.tint + '15' }]}
-                                        onPress={() => editImageDescription(entry)}
+                                        style={[styles.inlineActionButton, styles.cancelInlineButton, { borderColor: colors.border }]}
+                                        onPress={() => {
+                                          if (!entry.uri && !entry.description) {
+                                            // If it's a new text entry with no content, delete it
+                                            deleteImage(entry.id);
+                                          } else {
+                                            cancelEditDescription();
+                                          }
+                                        }}
                                       >
-                                        <IconSymbol name="pencil" size={12} color={colors.tint} />
+                                        <IconSymbol name="xmark" size={14} color={colors.textSecondary} />
+                                        <ThemedText type="caption" style={[styles.inlineActionText, { color: colors.textSecondary }]}>
+                                          {!entry.uri && !entry.description ? 'Delete' : 'Cancel'}
+                                        </ThemedText>
                                       </TouchableOpacity>
                                       <TouchableOpacity
-                                        style={[styles.editDescriptionButton, { backgroundColor: colors.destructive + '15', marginLeft: 8 }]}
-                                        onPress={() => deleteImage(entry.id)}
+                                        style={[styles.inlineActionButton, styles.saveInlineButton, { backgroundColor: colors.tint }]}
+                                        onPress={saveDescription}
                                       >
-                                        <IconSymbol name="trash" size={12} color={colors.destructive} />
+                                        <IconSymbol name="checkmark" size={14} color="#ffffff" />
+                                        <ThemedText type="caption" style={[styles.inlineActionText, { color: '#ffffff' }]}>
+                                          Save
+                                        </ThemedText>
                                       </TouchableOpacity>
                                     </View>
-                                    <ThemedText type="body" style={[styles.markdownDescription, { color: colors.text }]}>
-                                      {entry.description}
-                                    </ThemedText>
                                   </View>
                                 ) : (
-                                  <TouchableOpacity onPress={() => editImageDescription(entry)} style={styles.addDescriptionPromptContainer}>
-                                    <IconSymbol name="plus.circle" size={20} color={colors.textSecondary} />
-                                    <ThemedText type="caption" style={[styles.addDescriptionText, { color: colors.textSecondary }]}>
-                                      {entry.uri ? 'Add description for this image...' : 'Add text content...'}
-                                    </ThemedText>
-                                  </TouchableOpacity>
+                                  <View>
+                                    {entry.description ? (
+                                      <View>
+                                        <View style={styles.descriptionHeader}>
+                                          <IconSymbol name={entry.uri ? "text.alignleft" : "doc.text"} size={16} color={colors.textSecondary} />
+                                          <ThemedText type="caption" style={[styles.descriptionLabel, { color: colors.textSecondary }]}>
+                                            {entry.uri ? 'DESCRIPTION' : 'TEXT NOTE'}
+                                          </ThemedText>
+                                          <TouchableOpacity
+                                            style={[styles.editDescriptionButton, { backgroundColor: colors.tint + '15' }]}
+                                            onPress={() => editImageDescription(entry)}
+                                          >
+                                            <IconSymbol name="pencil" size={12} color={colors.tint} />
+                                          </TouchableOpacity>
+                                          <TouchableOpacity
+                                            style={[styles.editDescriptionButton, { backgroundColor: colors.destructive + '15', marginLeft: 8 }]}
+                                            onPress={() => deleteImage(entry.id)}
+                                          >
+                                            <IconSymbol name="trash" size={12} color={colors.destructive} />
+                                          </TouchableOpacity>
+                                        </View>
+                                        <ThemedText type="body" style={[styles.markdownDescription, { color: colors.text }]}>
+                                          {entry.description}
+                                        </ThemedText>
+                                      </View>
+                                    ) : (
+                                      <TouchableOpacity onPress={() => editImageDescription(entry)} style={styles.addDescriptionPromptContainer}>
+                                        <IconSymbol name="plus.circle" size={20} color={colors.textSecondary} />
+                                        <ThemedText type="caption" style={[styles.addDescriptionText, { color: colors.textSecondary }]}>
+                                          {entry.uri ? 'Add description for this image...' : 'Add text content...'}
+                                        </ThemedText>
+                                      </TouchableOpacity>
+                                    )}
+                                  </View>
                                 )}
                               </View>
-                            )}
-                          </View>
-                        </View>
-                      ))}
+                            </View>
+                          ))}
+                        </>
+                      )}
                       
                       {/* Add extra padding when editing to ensure buttons are visible above keyboard */}
                       {editingImageId && <View style={styles.keyboardSpacer} />}
@@ -590,7 +782,8 @@ export default function NotesScreen() {
           </View>
         </View>
       </LinearGradient>
-    </View>
+      </View>
+    </GestureHandlerRootView>
   );
 }
 
@@ -642,7 +835,7 @@ const styles = StyleSheet.create({
   editorContainer: {
     flex: 1,
     marginTop: 120,
-  },
+    },
   editorCard: {
     flex: 1,
     borderTopLeftRadius: 24,
@@ -653,9 +846,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 8,
+    // paddingTop: 10,
+    paddingBottom: 20,
   },
   keyboardAvoidingContainer: {
     flex: 1,
+    paddingTop: 20,
   },
   viewerScroll: {
     flex: 1,
@@ -712,6 +908,7 @@ const styles = StyleSheet.create({
   titleContainer: {
     marginBottom: 16,
     flexDirection: 'row',
+    gap: 8,
   },
   editTitleIndicator: {
     flexDirection: 'row',
@@ -1055,5 +1252,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#ffffff',
+  },
+  reorderingImageCard: {
+    borderWidth: 2,
+    borderColor: '#4ade80',
+    backgroundColor: 'transparent',
+  },
+  imageDragHandle: {
+    padding: 8,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  draggableImageContainer: {
+    backgroundColor: 'transparent',
   },
 });
