@@ -352,7 +352,7 @@ export default function NotesScreen() {
             </View>
           ) : null}
           
-          <View style={[styles.descriptionBlock, { backgroundColor: colors.background + '60' }]}>
+          <View style={[styles.descriptionBlock]}>
             {editingImageId === entry.id ? (
               <View style={styles.inlineEditContainer}>
                 <View style={styles.descriptionHeader}>
@@ -672,7 +672,7 @@ export default function NotesScreen() {
                                 </View>
                               ) : null}
                               
-                              <View style={[styles.descriptionBlock, { backgroundColor: colors.background + '60' }]}>
+                              <View style={[styles.descriptionBlock]}>
                                 {editingImageId === entry.id ? (
                                   <View style={styles.inlineEditContainer}>
                                     <View style={styles.descriptionHeader}>
@@ -1038,7 +1038,7 @@ const styles = StyleSheet.create({
     margin: 20,
     marginTop: 0,
     borderRadius: 16,
-    padding: 20,
+    // padding: 20,
   },
   inlineEditContainer: {
     gap: 16,
@@ -1046,7 +1046,7 @@ const styles = StyleSheet.create({
   inlineTextInput: {
     borderWidth: 1.5,
     borderRadius: 12,
-    padding: 20,
+    // padding: 20,
     fontSize: 16,
     lineHeight: 24,
     textAlignVertical: 'top',

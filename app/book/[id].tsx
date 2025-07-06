@@ -270,6 +270,11 @@ export default function BookDetailScreen() {
                         <ThemedView style={styles.notePageBadge}>
                           <ThemedText style={styles.notePageText}>p.{note.pageNumber}</ThemedText>
                         </ThemedView>
+
+                        <ThemedText style={styles.noteCardTitle} numberOfLines={3}>
+                          {note.title}
+                        </ThemedText>
+
                         <TouchableOpacity
                           style={styles.noteDeleteButton}
                           onPress={() => handleDeleteNote(note)}
@@ -278,16 +283,18 @@ export default function BookDetailScreen() {
                           <IconSymbol name="trash" size={14} color="#ff6b6b" />
                         </TouchableOpacity>
                       </ThemedView>
-
-                      <ThemedText style={styles.noteCardTitle} numberOfLines={3}>
-                        {note.title}
-                      </ThemedText>
-
+                      {note.images.length > 0 && note.images[0].description && (
+                        <ThemedText style={{ color: '#8b92b8', fontSize: 12 }}>
+                          {note.images[0].description
+                            ?.replace(/\n/g, ' ')
+                            .trim()
+                            .substring(0, 100) + (note.images[0].description?.length > 100 ? '...' : '')}
+                        </ThemedText>
+                      )}
                       {note.images.length > 0 && (
-                        <ThemedView style={styles.noteImageIndicator}>
-                          <IconSymbol name="photo" size={14} color="#667eea" />
+                        <ThemedView style={styles.noteImageIndicator}>                         
                           <ThemedText style={styles.noteImageCount}>
-                            {note.images.length}
+                            {note.images.length} {(note.images.length == 1) ? 'Note' : 'Notes'}
                           </ThemedText>
                         </ThemedView>
                       )}
