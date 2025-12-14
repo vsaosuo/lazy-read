@@ -1,5 +1,6 @@
 import { Book, Note } from '@/types';
-import * as FileSystem from 'expo-file-system';
+import { File } from 'expo-file-system';
+import * as FileSystemLegacy from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
@@ -30,8 +31,10 @@ export class PDFService {
       console.log('PDF created at:', uri);
       
       // Verify PDF was created
-      const pdfInfo = await FileSystem.getInfoAsync(uri);
-      console.log('PDF file info:', pdfInfo.exists ? `size: ${pdfInfo.size || 'unknown'}` : 'file does not exist');
+      const pdfFile = new File(uri);
+      const pdfExists = pdfFile.exists;
+      const pdfSize = pdfExists ? pdfFile.size : 0;
+      console.log('PDF file info:', pdfExists ? `size: ${pdfSize || 'unknown'}` : 'file does not exist');
       
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, {
@@ -74,14 +77,16 @@ export class PDFService {
       console.log('Normalized URI:', normalizedUri);
       
       // Get file info to determine the actual image format
-      const fileInfo = await FileSystem.getInfoAsync(normalizedUri);
-      if (!fileInfo.exists) {
+      const file = new File(normalizedUri);
+      const fileExists = file.exists;
+      if (!fileExists) {
         console.error('Image file does not exist:', normalizedUri);
         // Try original URI as fallback only if it's different
         if (normalizedUri !== imageUri) {
           console.log('Trying original URI as fallback:', imageUri);
-          const originalFileInfo = await FileSystem.getInfoAsync(imageUri);
-          if (!originalFileInfo.exists) {
+          const originalFile = new File(imageUri);
+          const originalExists = originalFile.exists;
+          if (!originalExists) {
             console.error('Original URI also does not exist:', imageUri);
             return '';
           }
@@ -93,8 +98,8 @@ export class PDFService {
       }
       
       console.log('File exists, reading as base64...');
-      const base64 = await FileSystem.readAsStringAsync(normalizedUri, {
-        encoding: FileSystem.EncodingType.Base64,
+      const base64 = await FileSystemLegacy.readAsStringAsync(normalizedUri, {
+        encoding: FileSystemLegacy.EncodingType.Base64,
       });
 
       if (!base64 || base64.trim() === '') {
